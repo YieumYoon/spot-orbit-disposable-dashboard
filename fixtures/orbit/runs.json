@@ -1,0 +1,55 @@
+{
+  "limit": 20,
+  "offset": 0,
+  "total": 6,
+  "resources": [
+    {
+      "uuid": "run-106",
+      "missionName": "Steam Loop Thermal Sweep",
+      "missionStatus": "RUNNING",
+      "startTime": "2026-03-11T17:10:00Z",
+      "endTime": null,
+      "actionCount": 14
+    },
+    {
+      "uuid": "run-105",
+      "missionName": "Boiler Gallery Patrol",
+      "missionStatus": "SUCCESS",
+      "startTime": "2026-03-11T12:18:00Z",
+      "endTime": "2026-03-11T12:54:00Z",
+      "actionCount": 16
+    },
+    {
+      "uuid": "run-104",
+      "missionName": "Cooling Tower Pass",
+      "missionStatus": "FAILURE",
+      "startTime": "2026-03-10T15:05:00Z",
+      "endTime": "2026-03-10T15:32:00Z",
+      "actionCount": 11
+    },
+    {
+      "uuid": "run-103",
+      "missionName": "Substation Inspection",
+      "missionStatus": "SUCCESS",
+      "startTime": "2026-03-08T10:30:00Z",
+      "endTime": "2026-03-08T10:58:00Z",
+      "actionCount": 12
+    },
+    {
+      "uuid": "run-102",
+      "missionName": "Perimeter Sweep",
+      "missionStatus": "STOPPED",
+      "startTime": "2026-02-25T18:20:00Z",
+      "endTime": "2026-02-25T18:33:00Z",
+      "actionCount": 8
+    },
+    {
+      "uuid": "run-101",
+      "missionName": "Steam Loop Thermal Sweep",
+      "missionStatus": "SUCCESS",
+      "startTime": "2026-02-15T13:00:00Z",
+      "endTime": "2026-02-15T13:29:00Z",
+      "actionCount": 15
+    }
+  ]
+}

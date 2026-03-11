@@ -1,0 +1,15 @@
+[project]
+name = "spot-orbit-disposable-dashboard"
+version = "0.1.0"
+description = "Internal-network Spot Orbit activity dashboard prototype"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "Deprecated>=1.2.18,<2",
+    "Flask>=3.1.0,<4",
+    "requests>=2.32.0,<3",
+    "waitress>=3.0.0,<4",
+]
+
+[tool.uv]
+package = false

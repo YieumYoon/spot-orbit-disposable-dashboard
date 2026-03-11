@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>Spot Orbit Activity Dashboard</title>
+    <link href="{{ url_for('dashboard.static', filename='favicon.svg') }}" rel="icon" type="image/svg+xml">
+    <link href="{{ url_for('dashboard.static', filename='css/app.css') }}" rel="stylesheet">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero__copy">
+          <p class="eyebrow">INTERNAL NETWORK / ORBIT CONNECTED</p>
+          <h1>Spot Orbit Activity Dashboard</h1>
+          <p class="hero__lede">
+            A live operational summary for leadership. One internal URL, one robot, one site,
+            and a direct view into current mission activity.
+          </p>
+        </div>
+        <div class="hero__panel">
+          <div class="hero__badge">
+            <span class="hero__badge-label">Website Link</span>
+            <code id="website-link">http://internal-host:8080/</code>
+          </div>
+          <div class="hero__meta">
+            <span>Display timezone</span>
+            <strong id="display-timezone">{{ config.timezone }}</strong>
+          </div>
+          <div class="hero__meta">
+            <span>Refresh cadence</span>
+            <strong>{{ config.dashboard_refresh_seconds }} seconds</strong>
+          </div>
+          <div class="hero__meta">
+            <span>Last refresh</span>
+            <strong id="last-refresh">Pending</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="controls">
+          <div class="controls__group">
+            {% for range_option in range_options %}
+            <button
+              class="range-pill{% if range_option == config.default_range %} is-active{% endif %}"
+              data-range="{{ range_option }}"
+              type="button"
+            >
+              {{ range_option }}
+            </button>
+            {% endfor %}
+          </div>
+          <div class="controls__state" id="load-state">Loading dashboard data…</div>
+        </section>
+
+        <section class="card-grid" id="summary-cards">
+          <article class="stat-card stat-card--accent">
+            <span class="stat-card__label">Robot Status</span>
+            <strong class="stat-card__value" id="card-robot-status">Unknown</strong>
+            <span class="stat-card__detail" id="card-robot-detail">Awaiting data</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-card__label">Last Activity</span>
+            <strong class="stat-card__value" id="card-last-activity">—</strong>
+            <span class="stat-card__detail">Most recent run, event, or capture</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-card__label">Runs In Range</span>
+            <strong class="stat-card__value" id="card-runs">0</strong>
+            <span class="stat-card__detail">Based on run start time</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-card__label">Successful Runs</span>
+            <strong class="stat-card__value" id="card-successful-runs">0</strong>
+            <span class="stat-card__detail">Terminal status = SUCCESS</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-card__label">Data Captures</span>
+            <strong class="stat-card__value" id="card-captures">0</strong>
+            <span class="stat-card__detail">Created during the selected range</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-card__label">Open Anomalies</span>
+            <strong class="stat-card__value" id="card-open-anomalies">0</strong>
+            <span class="stat-card__detail">Current internal Orbit count</span>
+          </article>
+        </section>
+
+        <section class="warning-strip is-hidden" id="warning-strip"></section>
+
+        <section class="chart-grid">
+          <article class="panel panel--wide">
+            <div class="panel__header">
+              <h2>Runs By Window</h2>
+              <p>Shows whether the site has been active at a glance.</p>
+            </div>
+            <canvas aria-label="Runs by time bucket" id="runs-chart"></canvas>
+          </article>
+          <article class="panel">
+            <div class="panel__header">
+              <h2>Mission Status Mix</h2>
+              <p>Normalized into a stable executive-facing set.</p>
+            </div>
+            <canvas aria-label="Mission status mix" id="status-chart"></canvas>
+          </article>
+          <article class="panel">
+            <div class="panel__header">
+              <h2>Data Captures By Window</h2>
+              <p>Evidence that Orbit is collecting inspection output.</p>
+            </div>
+            <canvas aria-label="Data captures by time bucket" id="captures-chart"></canvas>
+          </article>
+          <article class="panel panel--wide">
+            <div class="panel__header">
+              <h2>Run Events By Window</h2>
+              <p>Action-level execution volume across the selected range.</p>
+            </div>
+            <canvas aria-label="Run events by time bucket" id="events-chart"></canvas>
+          </article>
+        </section>
+
+        <section class="detail-grid">
+          <article class="panel">
+            <div class="panel__header">
+              <h2>Anomaly Snapshot</h2>
+              <p>Secondary signal that inspection work is surfacing findings.</p>
+            </div>
+            <div class="anomaly-stats">
+              <div>
+                <span>Open</span>
+                <strong id="anomaly-open">0</strong>
+              </div>
+              <div>
+                <span>Closed In Range</span>
+                <strong id="anomaly-closed">0</strong>
+              </div>
+              <div>
+                <span>New In Range</span>
+                <strong id="anomaly-new">0</strong>
+              </div>
+            </div>
+            <div class="list-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Recent anomalies</th>
+                    <th>Status</th>
+                    <th>Severity</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody id="anomaly-table-body"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel__header">
+              <h2>Recent Runs</h2>
+              <p>Latest mission executions for the selected range.</p>
+            </div>
+            <div class="list-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mission</th>
+                    <th>Status</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="runs-table-body"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel panel--full">
+            <div class="panel__header">
+              <h2>Recent Activity Feed</h2>
+              <p>Most recent action-level Orbit events, newest first.</p>
+            </div>
+            <div class="feed" id="events-feed"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      window.SPOT_ORBIT_DASHBOARD = {
+        apiUrl: {{ url_for('dashboard.dashboard_data') | tojson }},
+        defaultRange: {{ config.default_range | tojson }},
+        refreshSeconds: {{ config.dashboard_refresh_seconds | tojson }},
+        timezone: {{ config.timezone | tojson }},
+      };
+    </script>
+    <script src="{{ url_for('dashboard.static', filename='vendor/chart.umd.min.js') }}"></script>
+    <script src="{{ url_for('dashboard.static', filename='js/app.js') }}"></script>
+  </body>
+</html>

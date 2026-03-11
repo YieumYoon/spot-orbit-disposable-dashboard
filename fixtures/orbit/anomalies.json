@@ -1,0 +1,51 @@
+{
+  "limit": 20,
+  "offset": 0,
+  "total": 4,
+  "resources": [
+    {
+      "uuid": "anomaly-401",
+      "title": "Thermal drift at station A",
+      "name": "Thermal drift",
+      "status": "open",
+      "severity": 2,
+      "source": "Orbit",
+      "time": "2026-03-11T17:36:12Z",
+      "createdAt": "2026-03-11T17:36:20Z",
+      "statusModifiedAt": "2026-03-11T17:36:20Z"
+    },
+    {
+      "uuid": "anomaly-402",
+      "title": "Boiler gallery pressure variance",
+      "name": "Pressure variance",
+      "status": "closed",
+      "severity": 1,
+      "source": "Orbit",
+      "time": "2026-03-10T15:18:00Z",
+      "createdAt": "2026-03-10T15:18:40Z",
+      "statusModifiedAt": "2026-03-11T14:03:00Z"
+    },
+    {
+      "uuid": "anomaly-403",
+      "title": "Transformer surface temperature rise",
+      "name": "Surface temperature rise",
+      "status": "open",
+      "severity": 3,
+      "source": "Orbit",
+      "time": "2026-03-08T10:40:10Z",
+      "createdAt": "2026-03-08T10:40:15Z",
+      "statusModifiedAt": "2026-03-08T10:40:15Z"
+    },
+    {
+      "uuid": "anomaly-404",
+      "title": "Perimeter camera blur",
+      "name": "Camera blur",
+      "status": "closed",
+      "severity": 1,
+      "source": "Orbit",
+      "time": "2026-02-25T18:25:00Z",
+      "createdAt": "2026-02-25T18:25:18Z",
+      "statusModifiedAt": "2026-02-25T19:02:00Z"
+    }
+  ]
+}

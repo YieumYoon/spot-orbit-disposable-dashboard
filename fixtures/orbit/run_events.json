@@ -1,0 +1,111 @@
+{
+  "limit": 20,
+  "offset": 0,
+  "total": 7,
+  "resources": [
+    {
+      "uuid": "event-207",
+      "runUuid": "run-106",
+      "missionName": "Steam Loop Thermal Sweep",
+      "actionName": "Thermal station A",
+      "eventType": "daq",
+      "time": "2026-03-11T17:36:00Z",
+      "createdAt": "2026-03-11T17:36:12Z",
+      "error": 0,
+      "dataCaptures": [
+        {
+          "uuid": "capture-307"
+        },
+        {
+          "uuid": "capture-308"
+        }
+      ]
+    },
+    {
+      "uuid": "event-206",
+      "runUuid": "run-105",
+      "missionName": "Boiler Gallery Patrol",
+      "actionName": "Boiler valve corridor",
+      "eventType": "daq",
+      "time": "2026-03-11T12:35:00Z",
+      "createdAt": "2026-03-11T12:35:04Z",
+      "error": 0,
+      "dataCaptures": [
+        {
+          "uuid": "capture-305"
+        }
+      ]
+    },
+    {
+      "uuid": "event-205",
+      "runUuid": "run-104",
+      "missionName": "Cooling Tower Pass",
+      "actionName": "Cooling tower ladder",
+      "eventType": "daq",
+      "time": "2026-03-10T15:18:00Z",
+      "createdAt": "2026-03-10T15:18:09Z",
+      "error": 1,
+      "dataCaptures": [
+        {
+          "uuid": "capture-304"
+        }
+      ]
+    },
+    {
+      "uuid": "event-204",
+      "runUuid": "run-103",
+      "missionName": "Substation Inspection",
+      "actionName": "Transformer lane",
+      "eventType": "daq",
+      "time": "2026-03-08T10:39:00Z",
+      "createdAt": "2026-03-08T10:39:08Z",
+      "error": 0,
+      "dataCaptures": [
+        {
+          "uuid": "capture-303"
+        }
+      ]
+    },
+    {
+      "uuid": "event-203",
+      "runUuid": "run-102",
+      "missionName": "Perimeter Sweep",
+      "actionName": "Fence line north",
+      "eventType": "screenshot",
+      "time": "2026-02-25T18:25:00Z",
+      "createdAt": "2026-02-25T18:25:11Z",
+      "error": 0,
+      "dataCaptures": [
+        {
+          "uuid": "capture-302"
+        }
+      ]
+    },
+    {
+      "uuid": "event-202",
+      "runUuid": "run-101",
+      "missionName": "Steam Loop Thermal Sweep",
+      "actionName": "Thermal station B",
+      "eventType": "daq",
+      "time": "2026-02-15T13:14:00Z",
+      "createdAt": "2026-02-15T13:14:07Z",
+      "error": 0,
+      "dataCaptures": [
+        {
+          "uuid": "capture-301"
+        }
+      ]
+    },
+    {
+      "uuid": "event-201",
+      "runUuid": "run-105",
+      "missionName": "Boiler Gallery Patrol",
+      "actionName": "Boiler pump face",
+      "eventType": "screenshot",
+      "time": "2026-03-11T12:48:00Z",
+      "createdAt": "2026-03-11T12:48:05Z",
+      "error": 0,
+      "dataCaptures": []
+    }
+  ]
+}

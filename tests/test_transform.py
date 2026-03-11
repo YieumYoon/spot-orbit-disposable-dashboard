@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+
+from app.config import DashboardConfig
+from app.transform import build_dashboard_payload
+
+
+def _load_snapshot() -> dict:
+    fixture_dir = Path(__file__).resolve().parents[1] / "fixtures/orbit"
+    anomalies = json.loads((fixture_dir / "anomalies.json").read_text(encoding="utf-8"))
+    return {
+        "systemTime": json.loads((fixture_dir / "system_time.json").read_text(encoding="utf-8")),
+        "runs": json.loads((fixture_dir / "runs.json").read_text(encoding="utf-8")),
+        "runEvents": json.loads((fixture_dir / "run_events.json").read_text(encoding="utf-8")),
+        "runCaptures": json.loads((fixture_dir / "run_captures.json").read_text(encoding="utf-8")),
+        "anomalies": anomalies,
+        "openAnomalies": {
+            "resources": [item for item in anomalies["resources"] if item["status"] == "open"]
+        },
+        "warnings": ["Fixture mode is enabled."],
+    }
+
+
+def _config() -> DashboardConfig:
+    fixture_dir = Path(__file__).resolve().parents[1] / "fixtures/orbit"
+    return DashboardConfig(
+        orbit_host=None,
+        orbit_api_token=None,
+        orbit_verify_tls=True,
+        orbit_cert_path=None,
+        timezone="America/Indiana/Indianapolis",
+        dashboard_refresh_seconds=60,
+        dashboard_cache_ttl_seconds=30,
+        dashboard_bind_host="0.0.0.0",
+        dashboard_port=8080,
+        fixture_mode=True,
+        fixture_dir=fixture_dir,
+        default_range="7d",
+        orbit_item_limit=500,
+    )
+
+
+class TransformTestCase(unittest.TestCase):
+    def test_build_payload_for_7d_range(self) -> None:
+        payload = build_dashboard_payload(_load_snapshot(), _config(), "7d")
+        result = payload.to_dict()
+        self.assertEqual(result["summary"]["runs"], 4)
+        self.assertEqual(result["summary"]["successfulRuns"], 2)
+        self.assertEqual(result["summary"]["openAnomalies"], 2)
+        self.assertEqual(result["summary"]["robotStatus"]["label"], "Active")
+        self.assertEqual(result["anomalies"]["newInRange"], 3)
+
+    def test_build_payload_for_24h_range(self) -> None:
+        payload = build_dashboard_payload(_load_snapshot(), _config(), "24h")
+        result = payload.to_dict()
+        self.assertEqual(result["range"], "24h")
+        self.assertEqual(len(result["trends"]["runsByBucket"]), 24)
+        self.assertEqual(result["summary"]["runs"], 2)
+
+    def test_unknown_range_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            build_dashboard_payload(_load_snapshot(), _config(), "90d")
+
+
+if __name__ == "__main__":
+    unittest.main()

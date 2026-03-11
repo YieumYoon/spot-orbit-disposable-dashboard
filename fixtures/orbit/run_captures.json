@@ -1,0 +1,63 @@
+{
+  "limit": 20,
+  "offset": 0,
+  "total": 8,
+  "resources": [
+    {
+      "uuid": "capture-308",
+      "runEventUuid": "event-207",
+      "createdAt": "2026-03-11T17:36:18Z",
+      "time": "2026-03-11T17:36:16Z",
+      "channelName": "thermal"
+    },
+    {
+      "uuid": "capture-307",
+      "runEventUuid": "event-207",
+      "createdAt": "2026-03-11T17:36:13Z",
+      "time": "2026-03-11T17:36:12Z",
+      "channelName": "acoustic"
+    },
+    {
+      "uuid": "capture-306",
+      "runEventUuid": "event-201",
+      "createdAt": "2026-03-11T12:48:10Z",
+      "time": "2026-03-11T12:48:09Z",
+      "channelName": "visual"
+    },
+    {
+      "uuid": "capture-305",
+      "runEventUuid": "event-206",
+      "createdAt": "2026-03-11T12:35:07Z",
+      "time": "2026-03-11T12:35:06Z",
+      "channelName": "thermal"
+    },
+    {
+      "uuid": "capture-304",
+      "runEventUuid": "event-205",
+      "createdAt": "2026-03-10T15:18:10Z",
+      "time": "2026-03-10T15:18:09Z",
+      "channelName": "thermal"
+    },
+    {
+      "uuid": "capture-303",
+      "runEventUuid": "event-204",
+      "createdAt": "2026-03-08T10:39:11Z",
+      "time": "2026-03-08T10:39:10Z",
+      "channelName": "visual"
+    },
+    {
+      "uuid": "capture-302",
+      "runEventUuid": "event-203",
+      "createdAt": "2026-02-25T18:25:14Z",
+      "time": "2026-02-25T18:25:12Z",
+      "channelName": "visual"
+    },
+    {
+      "uuid": "capture-301",
+      "runEventUuid": "event-202",
+      "createdAt": "2026-02-15T13:14:09Z",
+      "time": "2026-02-15T13:14:08Z",
+      "channelName": "thermal"
+    }
+  ]
+}
