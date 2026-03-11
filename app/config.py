@@ -8,6 +8,29 @@ from pathlib import Path
 RANGE_OPTIONS = ("24h", "7d", "30d")
 
 
+def _load_dotenv(env_path: Path) -> None:
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+
+        key, separator, value = line.partition("=")
+        if not separator:
+            continue
+
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+
+        os.environ.setdefault(key, value)
+
+
 def _env_flag(name: str, default: bool) -> bool:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -33,6 +56,10 @@ class DashboardConfig:
 
 
 def load_config() -> DashboardConfig:
+    repo_root = Path(__file__).resolve().parents[1]
+    env_file = Path(os.getenv("DASHBOARD_ENV_FILE", str(repo_root / ".env")))
+    _load_dotenv(env_file)
+
     verify_value = os.getenv("ORBIT_VERIFY_TLS", "true").strip()
     if verify_value.lower() in {"true", "false"}:
         verify_setting: bool | str = verify_value.lower() == "true"
