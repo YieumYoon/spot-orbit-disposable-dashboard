@@ -38,6 +38,8 @@ py -3.10 -m venv .venv
 py -m pip install --no-index --find-links=wheelhouse -r requirements-offline.txt
 ```
 
+`wheelhouse/` is already pruned for the exact Windows CPython 3.10 dependency set this app needs. Replace the server copy rather than merging with an older wheelhouse.
+
 3. Set the Orbit environment variables and disable fixtures:
 
 ```powershell

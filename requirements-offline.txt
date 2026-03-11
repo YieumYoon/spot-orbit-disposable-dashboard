@@ -1,4 +1,5 @@
 Deprecated==1.2.18
+colorama==0.4.6; platform_system == "Windows"
 Flask==3.1.3
 requests==2.32.5
 waitress==3.0.2
