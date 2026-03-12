@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -65,11 +65,11 @@ def _to_iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _zoneinfo(timezone_name: str) -> ZoneInfo:
+def _zoneinfo(timezone_name: str) -> tzinfo:
     try:
         return ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+        return timezone.utc
 
 
 def _bucket_floor(value: datetime, range_key: str) -> datetime:

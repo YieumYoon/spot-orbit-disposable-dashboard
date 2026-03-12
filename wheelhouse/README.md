@@ -25,6 +25,7 @@ Keep only this dependency closure:
 - `urllib3==2.6.3`
 - `certifi==2026.2.25`
 - `waitress==3.0.2`
+- `tzdata==2025.3`
 
 Do not keep stale wheels for:
 

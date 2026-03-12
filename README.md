@@ -68,6 +68,8 @@ py -m pip install --no-index --find-links=wheelhouse -r requirements-offline.txt
 
 `wheelhouse/` is already pruned for the exact Windows CPython 3.10 dependency set this app needs. Replace the server copy rather than merging with an older wheelhouse.
 
+`tzdata` is included in the offline dependency set so Python `zoneinfo` works on Windows hosts that do not ship the IANA timezone database.
+
 3. Create `.env` on the Windows machine from `.env.example` and fill in the live Orbit values:
 
 ```powershell

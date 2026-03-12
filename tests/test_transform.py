@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfoNotFoundError
 
 from app.config import DashboardConfig
+from app.transform import _bucket_label
 from app.transform import build_dashboard_payload
 
 
@@ -63,6 +67,11 @@ class TransformTestCase(unittest.TestCase):
     def test_unknown_range_raises(self) -> None:
         with self.assertRaises(ValueError):
             build_dashboard_payload(_load_snapshot(), _config(), "90d")
+
+    def test_bucket_label_falls_back_to_builtin_utc_when_zoneinfo_is_unavailable(self) -> None:
+        with patch("app.transform.ZoneInfo", side_effect=ZoneInfoNotFoundError("missing")):
+            label = _bucket_label(datetime(2024, 2, 14, 15, tzinfo=timezone.utc), "UTC", "24h")
+            self.assertEqual(label, "3 PM")
 
 
 if __name__ == "__main__":
