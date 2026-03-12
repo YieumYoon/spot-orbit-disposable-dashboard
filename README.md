@@ -39,6 +39,7 @@ ORBIT_VERIFY_TLS=true
 TIMEZONE=America/Indiana/Indianapolis
 DASHBOARD_BIND_HOST=0.0.0.0
 DASHBOARD_PORT=8080
+ORBIT_ITEM_LIMIT=500
 ```
 
 ## Key Variables
@@ -52,8 +53,11 @@ DASHBOARD_PORT=8080
 - `DASHBOARD_CACHE_TTL_SECONDS`
 - `DASHBOARD_BIND_HOST`
 - `DASHBOARD_PORT`
+- `ORBIT_ITEM_LIMIT`
 - `ORBIT_USE_FIXTURES`
 - `ORBIT_FIXTURE_DIR`
+
+`ORBIT_ITEM_LIMIT` is the per-request page size for Orbit API reads. The dashboard paginates across all available pages, so increasing it mainly changes how many items are fetched per request rather than acting as a hard cap on totals.
 
 ## Offline Windows Deployment
 

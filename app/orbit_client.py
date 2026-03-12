@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 from .config import DashboardConfig
 from .transform import build_dashboard_payload
@@ -86,11 +86,69 @@ class LiveOrbitSource:
         self._client = client
         return client
 
-    def _check_limit(self, payload: dict[str, Any], resource_name: str, warnings: list[str]) -> None:
+    def _warn_if_incomplete(self, payload: dict[str, Any], resource_name: str, warnings: list[str]) -> None:
         total = payload.get("total")
-        limit = payload.get("limit")
-        if isinstance(total, int) and isinstance(limit, int) and total > limit:
-            warnings.append(f"{resource_name} results truncated at {limit} of {total}.")
+        loaded = len(payload.get("resources", []))
+        if isinstance(total, int) and total > loaded:
+            warnings.append(f"{resource_name} results incomplete: loaded {loaded} of {total}.")
+
+    def _fetch_paginated(
+        self,
+        fetch_page: Callable[..., Any],
+        params: dict[str, Any],
+        resource_name: str,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        page_size = self._config.orbit_item_limit
+        offset = 0
+        combined_resources: list[dict[str, Any]] = []
+        last_payload: dict[str, Any] | None = None
+
+        while True:
+            page_payload = fetch_page(params={**params, "limit": page_size, "offset": offset}).json()
+            last_payload = page_payload
+
+            current_offset = page_payload.get("offset", offset)
+            if isinstance(current_offset, int) and current_offset != offset:
+                warnings.append(f"{resource_name} pagination desynced at offset {offset}.")
+                break
+
+            page_resources_raw = page_payload.get("resources", [])
+            page_resources = page_resources_raw if isinstance(page_resources_raw, list) else []
+            combined_resources.extend(page_resources)
+
+            total = page_payload.get("total")
+            page_limit = page_payload.get("limit")
+            effective_limit = page_limit if isinstance(page_limit, int) and page_limit > 0 else page_size
+
+            if not page_resources:
+                break
+            if isinstance(total, int) and len(combined_resources) >= total:
+                break
+            if len(page_resources) < effective_limit:
+                break
+
+            next_offset = offset + len(page_resources)
+            if next_offset <= offset:
+                warnings.append(f"{resource_name} pagination stopped early at offset {offset}.")
+                break
+            offset = next_offset
+
+        if last_payload is None:
+            payload = {"resources": [], "limit": page_size, "offset": 0, "total": 0}
+        else:
+            payload = dict(last_payload)
+            payload["resources"] = combined_resources
+            payload["offset"] = 0
+            payload["limit"] = page_size
+            payload["total"] = (
+                payload.get("total")
+                if isinstance(payload.get("total"), int)
+                else len(combined_resources)
+            )
+
+        self._warn_if_incomplete(payload, resource_name, warnings)
+        return payload
 
     def fetch_snapshot(self, range_key: str) -> dict[str, Any]:
         client = self._get_client()
@@ -103,53 +161,55 @@ class LiveOrbitSource:
 
         start_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(window_start_ms / 1000))
         end_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now_utc_ms / 1000))
-        limit = self._config.orbit_item_limit
-
-        runs = client.get_runs(
-            params={
+        runs = self._fetch_paginated(
+            client.get_runs,
+            {
                 "startTime": start_iso,
                 "endTime": end_iso,
-                "limit": limit,
                 "orderBy": "newest",
-            }
-        ).json()
-        run_events = client.get_run_events(
-            params={
+            },
+            "runs",
+            warnings,
+        )
+        run_events = self._fetch_paginated(
+            client.get_run_events,
+            {
                 "startTime": start_iso,
                 "endTime": end_iso,
-                "limit": limit,
                 "orderBy": "-created_at",
-            }
-        ).json()
-        run_captures = client.get_run_captures(
-            params={
+            },
+            "run events",
+            warnings,
+        )
+        run_captures = self._fetch_paginated(
+            client.get_run_captures,
+            {
                 "startCreatedAt": start_iso,
                 "endCreatedAt": end_iso,
-                "limit": limit,
                 "orderBy": "-created_at",
-            }
-        ).json()
-        anomalies = client.get_anomalies(
-            params={
+            },
+            "run captures",
+            warnings,
+        )
+        anomalies = self._fetch_paginated(
+            client.get_anomalies,
+            {
                 "startTime": start_iso,
                 "endTime": end_iso,
-                "limit": limit,
                 "orderBy": "-time",
-            }
-        ).json()
-        open_anomalies = client.get_anomalies(
-            params={
+            },
+            "anomalies",
+            warnings,
+        )
+        open_anomalies = self._fetch_paginated(
+            client.get_anomalies,
+            {
                 "status": "open",
-                "limit": limit,
                 "orderBy": "-time",
-            }
-        ).json()
-
-        self._check_limit(runs, "runs", warnings)
-        self._check_limit(run_events, "run events", warnings)
-        self._check_limit(run_captures, "run captures", warnings)
-        self._check_limit(anomalies, "anomalies", warnings)
-        self._check_limit(open_anomalies, "open anomalies", warnings)
+            },
+            "open anomalies",
+            warnings,
+        )
 
         return {
             "systemTime": system_time,
