@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import sys
 from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -80,6 +81,25 @@ def _check_timezone(config: DashboardConfig, warnings: list[str]) -> None:
         )
 
 
+def _check_frontend_assets(failures: list[str]) -> None:
+    repo_root = Path(__file__).resolve().parent
+    required_assets = [
+        repo_root / "app/static/js/app.js",
+        repo_root / "app/static/vendor/chart.umd.min.js",
+    ]
+
+    for asset_path in required_assets:
+        if not asset_path.exists():
+            failures.append(f"asset:{asset_path.name}")
+            _print_result("FAIL", "Frontend asset", f"Missing {asset_path}")
+            continue
+        if asset_path.stat().st_size <= 0:
+            failures.append(f"asset:{asset_path.name}")
+            _print_result("FAIL", "Frontend asset", f"Empty file at {asset_path}")
+            continue
+        _print_result("PASS", "Frontend asset", f"{asset_path.name} present ({asset_path.stat().st_size} bytes)")
+
+
 def main() -> int:
     failures: list[str] = []
     warnings: list[str] = []
@@ -118,6 +138,7 @@ def main() -> int:
         failures.append("orbit_api_token")
         _print_result("FAIL", "Config value", "ORBIT_API_TOKEN is missing")
 
+    _check_frontend_assets(failures)
     _check_timezone(config, warnings)
 
     if failures:

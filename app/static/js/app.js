@@ -3,6 +3,7 @@ const APP = window.SPOT_ORBIT_DASHBOARD;
 const state = {
   range: APP.defaultRange,
   charts: {},
+  clientWarnings: [],
   timerId: null,
 };
 
@@ -30,6 +31,16 @@ function setStateMessage(message, isError = false) {
   element.style.color = isError ? "#ff7a59" : "";
 }
 
+function addClientWarning(message) {
+  if (!state.clientWarnings.includes(message)) {
+    state.clientWarnings.push(message);
+  }
+}
+
+function mergedWarnings(warnings) {
+  return [...new Set([...(warnings || []), ...state.clientWarnings])];
+}
+
 function statusChipClass(status) {
   const normalized = status || "unknown";
   if (normalized === "running") return "status-chip status-chip--active";
@@ -49,13 +60,14 @@ function createOrUpdateChart(key, elementId, config) {
 
 function renderWarnings(warnings) {
   const strip = document.getElementById("warning-strip");
-  if (!warnings || warnings.length === 0) {
+  const combined = mergedWarnings(warnings);
+  if (!combined.length) {
     strip.classList.add("is-hidden");
     strip.textContent = "";
     return;
   }
   strip.classList.remove("is-hidden");
-  strip.textContent = warnings.join(" ");
+  strip.textContent = combined.join(" ");
 }
 
 function renderSummary(summary) {
@@ -69,6 +81,11 @@ function renderSummary(summary) {
 }
 
 function renderCharts(trends) {
+  if (typeof window.Chart !== "function") {
+    addClientWarning("Charts are unavailable because the local chart script could not be loaded from /static/vendor/chart.umd.min.js.");
+    return;
+  }
+
   createOrUpdateChart("runs", "runs-chart", {
     type: "bar",
     data: {

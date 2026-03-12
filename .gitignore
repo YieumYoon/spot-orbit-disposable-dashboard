@@ -6,4 +6,6 @@
 .env
 __pycache__/
 vendor/
+!app/static/vendor/
+!app/static/vendor/chart.umd.min.js
 docs/
