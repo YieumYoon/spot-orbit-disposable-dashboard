@@ -26,7 +26,8 @@ _INITIAL_SLICE_WINDOWS = {
     "7d": timedelta(days=1),
     "30d": timedelta(days=1),
 }
-_MIN_SLICE_WINDOW = timedelta(hours=1)
+_TARGET_SLICE_WINDOW = timedelta(hours=1)
+_MIN_SLICE_WINDOW = timedelta(minutes=15)
 
 
 def _resolve_vendor_path() -> Path:
@@ -387,8 +388,13 @@ class LiveOrbitSource:
         if duration <= _MIN_SLICE_WINDOW:
             return []
 
+        # Favor 1-hour chunks for broad retries, then keep refining down to a
+        # smaller hard stop when a <=1h slice is still incomplete.
         next_slice_width = duration / 2
-        if next_slice_width < _MIN_SLICE_WINDOW:
+        if duration > _TARGET_SLICE_WINDOW:
+            if next_slice_width < _TARGET_SLICE_WINDOW:
+                next_slice_width = _TARGET_SLICE_WINDOW
+        elif next_slice_width < _MIN_SLICE_WINDOW:
             next_slice_width = _MIN_SLICE_WINDOW
 
         refined_slices: list[tuple[datetime, datetime]] = []

@@ -500,6 +500,55 @@ class OrbitClientTestCase(unittest.TestCase):
         self.assertIn(("2026-03-12T10:00:00Z", "2026-03-12T11:00:00Z", 0), calls)
         self.assertIn(("2026-03-12T11:00:00Z", "2026-03-12T11:30:00Z", 0), calls)
 
+    def test_fetch_ranged_resource_refines_one_hour_slice_down_to_hard_floor(self) -> None:
+        source = LiveOrbitSource(_config())
+        warnings: list[str] = []
+        spec = _RANGED_ORBIT_ENDPOINTS["runs"]
+        window_start = datetime(2026, 3, 12, 11, 0, tzinfo=timezone.utc)
+        window_end = datetime(2026, 3, 12, 12, 0, tzinfo=timezone.utc)
+        calls: list[tuple[str, str, int]] = []
+
+        def fetch_page(*, params: dict) -> _FakeResponse:
+            start = _parse_iso(params["startTime"])
+            end = _parse_iso(params["endTime"])
+            offset = params["offset"]
+            calls.append((params["startTime"], params["endTime"], offset))
+
+            if end - start > timedelta(minutes=15):
+                pages = {
+                    0: {
+                        "resources": [
+                            _run(f"{params['startTime']}-a", start + timedelta(minutes=1)),
+                            _run(f"{params['startTime']}-b", start + timedelta(minutes=2)),
+                        ],
+                        "limit": 2,
+                        "offset": 0,
+                        "total": 3,
+                    },
+                    2: {"resources": [], "limit": 2, "offset": 2, "total": 3},
+                }
+                return _FakeResponse(pages[offset])
+
+            resources = [
+                _run(f"{params['startTime']}-a", start + timedelta(minutes=1)),
+                _run(f"{params['startTime']}-b", start + timedelta(minutes=2)),
+            ]
+            return _FakeResponse(
+                {
+                    "resources": resources[offset:offset + 2],
+                    "limit": 2,
+                    "offset": offset,
+                    "total": len(resources),
+                }
+            )
+
+        payload = source._fetch_ranged_resource(fetch_page, spec, "24h", window_start, window_end, warnings)
+
+        self.assertFalse(warnings)
+        self.assertEqual(payload["total"], len(payload["resources"]))
+        self.assertIn(("2026-03-12T11:00:00Z", "2026-03-12T11:30:00Z", 0), calls)
+        self.assertIn(("2026-03-12T11:00:00Z", "2026-03-12T11:15:00Z", 0), calls)
+
     def test_fetch_ranged_resource_dedupes_adjacent_slices_by_uuid(self) -> None:
         source = LiveOrbitSource(_config())
         warnings: list[str] = []
@@ -543,7 +592,7 @@ class OrbitClientTestCase(unittest.TestCase):
         warnings: list[str] = []
         spec = _RANGED_ORBIT_ENDPOINTS["runEvents"]
         window_start = datetime(2026, 3, 12, 11, tzinfo=timezone.utc)
-        window_end = datetime(2026, 3, 12, 12, tzinfo=timezone.utc)
+        window_end = datetime(2026, 3, 12, 11, 15, tzinfo=timezone.utc)
 
         def fetch_page(*, params: dict) -> _FakeResponse:
             pages = {
@@ -571,7 +620,7 @@ class OrbitClientTestCase(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "start=2026-03-12T11:00:00Z end=2026-03-12T12:00:00Z loaded=2 total=3 requested_limit=2"
+                "start=2026-03-12T11:00:00Z end=2026-03-12T11:15:00Z loaded=2 total=3 requested_limit=2"
                 in message
                 for message in captured_logs.output
             )

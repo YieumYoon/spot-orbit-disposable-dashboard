@@ -16,6 +16,16 @@ Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
 The app loads `.env` from the repo root automatically. Real environment variables still win if both are set.
 
+## Troubleshooting Range Warnings
+
+To inspect the live Orbit-backed `7d` / `30d` warning behavior directly, run:
+
+```bash
+UV_CACHE_DIR=.uv-cache uv run python check_orbit_range_warnings.py
+```
+
+The script prints dashboard warnings, per-resource loaded versus total counts, and the final slice windows that still remained incomplete after retries.
+
 ## `.env` Support
 
 Use [`.env.example`](/Users/junsu/Documents/github/spot-orbit-disposable-dashboard/.env.example) as the template for a local `.env` file.
