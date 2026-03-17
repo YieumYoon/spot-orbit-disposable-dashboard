@@ -354,6 +354,53 @@ class LiveOrbitSource:
         }
         return self._fetch_paginated_result(fetch_page, params, spec.resource_name)
 
+    def _log_incomplete_slice(
+        self,
+        spec: RangedOrbitEndpointSpec,
+        slice_start: datetime,
+        slice_end: datetime,
+        result: PaginatedFetchResult,
+    ) -> None:
+        loaded = len(result.payload.get("resources", []))
+        total = result.payload.get("total")
+        issues = "; ".join(result.issues) if result.issues else "none"
+        LOGGER.warning(
+            (
+                "Orbit %s remained incomplete after slice retries: "
+                "start=%s end=%s loaded=%s total=%s requested_limit=%s issues=%s"
+            ),
+            spec.resource_name,
+            _to_orbit_iso(slice_start),
+            _to_orbit_iso(slice_end),
+            loaded,
+            total,
+            self._config.orbit_item_limit,
+            issues,
+        )
+
+    def _build_refined_slices(
+        self,
+        slice_start: datetime,
+        slice_end: datetime,
+    ) -> list[tuple[datetime, datetime]]:
+        duration = slice_end - slice_start
+        if duration <= _MIN_SLICE_WINDOW:
+            return []
+
+        next_slice_width = duration / 2
+        if next_slice_width < _MIN_SLICE_WINDOW:
+            next_slice_width = _MIN_SLICE_WINDOW
+
+        refined_slices: list[tuple[datetime, datetime]] = []
+        cursor = slice_start
+        while cursor < slice_end:
+            refined_end = min(cursor + next_slice_width, slice_end)
+            if refined_end <= cursor:
+                break
+            refined_slices.append((cursor, refined_end))
+            cursor = refined_end
+        return refined_slices
+
     def _fetch_ranged_slice_with_retry(
         self,
         fetch_page: Callable[..., Any],
@@ -366,36 +413,36 @@ class LiveOrbitSource:
             return [result]
 
         duration = slice_end - slice_start
-        half_duration = duration / 2
-        if half_duration < _MIN_SLICE_WINDOW:
-            LOGGER.warning(
-                "Orbit %s remained incomplete at minimum slice window from %s to %s.",
-                spec.resource_name,
-                _to_orbit_iso(slice_start),
-                _to_orbit_iso(slice_end),
-            )
+        if duration <= _MIN_SLICE_WINDOW:
+            self._log_incomplete_slice(spec, slice_start, slice_end, result)
             return [result]
 
-        midpoint = slice_start + half_duration
-        if midpoint <= slice_start or midpoint >= slice_end:
+        refined_slices = self._build_refined_slices(slice_start, slice_end)
+        if not refined_slices:
             LOGGER.warning(
                 "Orbit %s could not be split into smaller slices from %s to %s.",
                 spec.resource_name,
                 _to_orbit_iso(slice_start),
                 _to_orbit_iso(slice_end),
             )
+            self._log_incomplete_slice(spec, slice_start, slice_end, result)
             return [result]
 
+        next_slice_width = refined_slices[0][1] - refined_slices[0][0]
         LOGGER.info(
-            "Retrying Orbit %s with smaller slices from %s to %s.",
+            "Retrying Orbit %s with %s smaller slices from %s to %s (target_slice=%s seconds).",
             spec.resource_name,
+            len(refined_slices),
             _to_orbit_iso(slice_start),
             _to_orbit_iso(slice_end),
+            int(next_slice_width.total_seconds()),
         )
-        return [
-            *self._fetch_ranged_slice_with_retry(fetch_page, spec, slice_start, midpoint),
-            *self._fetch_ranged_slice_with_retry(fetch_page, spec, midpoint, slice_end),
-        ]
+        retried_results: list[PaginatedFetchResult] = []
+        for refined_start, refined_end in refined_slices:
+            retried_results.extend(
+                self._fetch_ranged_slice_with_retry(fetch_page, spec, refined_start, refined_end)
+            )
+        return retried_results
 
     def _fetch_ranged_resource(
         self,
