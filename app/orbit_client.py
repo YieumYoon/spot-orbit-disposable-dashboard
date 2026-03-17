@@ -5,6 +5,8 @@ import json
 import logging
 import sys
 import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
@@ -14,6 +16,17 @@ from .transform import build_dashboard_payload
 
 
 LOGGER = logging.getLogger(__name__)
+_RANGE_WINDOWS = {
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+}
+_INITIAL_SLICE_WINDOWS = {
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=1),
+    "30d": timedelta(days=1),
+}
+_MIN_SLICE_WINDOW = timedelta(hours=1)
 
 
 def _resolve_vendor_path() -> Path:
@@ -42,6 +55,89 @@ def _warning_label(resource_name: str) -> str:
         "anomalies": "Issues",
         "open anomalies": "Open issues",
     }.get(resource_name, resource_name.capitalize())
+
+
+def _parse_orbit_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _to_orbit_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _unique_messages(messages: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for message in messages:
+        if message in seen:
+            continue
+        seen.add(message)
+        unique.append(message)
+    return unique
+
+
+@dataclass(frozen=True)
+class PaginatedFetchResult:
+    payload: dict[str, Any]
+    incomplete: bool
+    issues: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RangedOrbitEndpointSpec:
+    getter_name: str
+    resource_name: str
+    start_param: str
+    end_param: str
+    order_by: str
+    timestamp_fields: tuple[str, ...]
+
+
+_RANGED_ORBIT_ENDPOINTS = {
+    "runs": RangedOrbitEndpointSpec(
+        getter_name="get_runs",
+        resource_name="runs",
+        start_param="startTime",
+        end_param="endTime",
+        order_by="newest",
+        timestamp_fields=("startTime", "endTime"),
+    ),
+    "runEvents": RangedOrbitEndpointSpec(
+        getter_name="get_run_events",
+        resource_name="run events",
+        start_param="startTime",
+        end_param="endTime",
+        order_by="-created_at",
+        timestamp_fields=("createdAt",),
+    ),
+    "runCaptures": RangedOrbitEndpointSpec(
+        getter_name="get_run_captures",
+        resource_name="run captures",
+        start_param="startCreatedAt",
+        end_param="endCreatedAt",
+        order_by="-created_at",
+        timestamp_fields=("createdAt",),
+    ),
+    "anomalies": RangedOrbitEndpointSpec(
+        getter_name="get_anomalies",
+        resource_name="anomalies",
+        start_param="startTime",
+        end_param="endTime",
+        order_by="-time",
+        timestamp_fields=("time", "createdAt"),
+    ),
+}
 
 
 class FixtureOrbitSource:
@@ -104,17 +200,24 @@ class LiveOrbitSource:
                 f"{_warning_label(resource_name)} may be incomplete: showing {loaded} of {total} records from Orbit."
             )
 
-    def _fetch_paginated(
+    def _shortfall(self, payload: dict[str, Any]) -> int:
+        total = payload.get("total")
+        loaded = len(payload.get("resources", []))
+        if isinstance(total, int) and total > loaded:
+            return total - loaded
+        return 0
+
+    def _fetch_paginated_result(
         self,
         fetch_page: Callable[..., Any],
         params: dict[str, Any],
         resource_name: str,
-        warnings: list[str],
-    ) -> dict[str, Any]:
+    ) -> PaginatedFetchResult:
         page_size = self._config.orbit_item_limit
         offset = 0
         combined_resources: list[dict[str, Any]] = []
         last_payload: dict[str, Any] | None = None
+        issues: list[str] = []
 
         while True:
             page_payload = fetch_page(params={**params, "limit": page_size, "offset": offset}).json()
@@ -122,7 +225,7 @@ class LiveOrbitSource:
 
             current_offset = page_payload.get("offset", offset)
             if isinstance(current_offset, int) and current_offset != offset:
-                warnings.append(
+                issues.append(
                     f"{_warning_label(resource_name)} may be incomplete because Orbit returned an unexpected page at record {offset}."
                 )
                 break
@@ -145,7 +248,7 @@ class LiveOrbitSource:
 
             next_offset = offset + len(page_resources)
             if next_offset <= offset:
-                warnings.append(
+                issues.append(
                     f"{_warning_label(resource_name)} may be incomplete because Orbit pagination stopped early at record {offset}."
                 )
                 break
@@ -164,58 +267,194 @@ class LiveOrbitSource:
                 else len(combined_resources)
             )
 
-        self._warn_if_incomplete(payload, resource_name, warnings)
+        return PaginatedFetchResult(
+            payload=payload,
+            incomplete=bool(issues) or self._shortfall(payload) > 0,
+            issues=tuple(issues),
+        )
+
+    def _fetch_paginated(
+        self,
+        fetch_page: Callable[..., Any],
+        params: dict[str, Any],
+        resource_name: str,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        result = self._fetch_paginated_result(fetch_page, params, resource_name)
+        warnings.extend(result.issues)
+        self._warn_if_incomplete(result.payload, resource_name, warnings)
+        return result.payload
+
+    def _resource_sort_key(self, resource: dict[str, Any], spec: RangedOrbitEndpointSpec) -> datetime:
+        for field_name in spec.timestamp_fields:
+            parsed = _parse_orbit_datetime(resource.get(field_name))
+            if parsed is not None:
+                return parsed
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    def _merge_ranged_results(
+        self,
+        results: list[PaginatedFetchResult],
+        spec: RangedOrbitEndpointSpec,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        resources: list[dict[str, Any]] = []
+        seen_uuids: set[str] = set()
+        incomplete_issues: list[str] = []
+        missing_records = 0
+        any_incomplete = False
+
+        for result in results:
+            payload_resources_raw = result.payload.get("resources", [])
+            payload_resources = payload_resources_raw if isinstance(payload_resources_raw, list) else []
+
+            if result.incomplete:
+                any_incomplete = True
+                incomplete_issues.extend(result.issues)
+                missing_records += self._shortfall(result.payload)
+
+            for resource in payload_resources:
+                if not isinstance(resource, dict):
+                    continue
+                resource_uuid = resource.get("uuid")
+                if isinstance(resource_uuid, str) and resource_uuid:
+                    if resource_uuid in seen_uuids:
+                        continue
+                    seen_uuids.add(resource_uuid)
+                resources.append(resource)
+
+        resources.sort(key=lambda resource: self._resource_sort_key(resource, spec), reverse=True)
+
+        payload = {
+            "resources": resources,
+            "limit": self._config.orbit_item_limit,
+            "offset": 0,
+            "total": len(resources) + missing_records,
+        }
+
+        if any_incomplete:
+            if payload["total"] > len(resources):
+                self._warn_if_incomplete(payload, spec.resource_name, warnings)
+            else:
+                warnings.extend(_unique_messages(incomplete_issues))
+
         return payload
+
+    def _fetch_ranged_slice(
+        self,
+        fetch_page: Callable[..., Any],
+        spec: RangedOrbitEndpointSpec,
+        slice_start: datetime,
+        slice_end: datetime,
+    ) -> PaginatedFetchResult:
+        params = {
+            spec.start_param: _to_orbit_iso(slice_start),
+            spec.end_param: _to_orbit_iso(slice_end),
+            "orderBy": spec.order_by,
+        }
+        return self._fetch_paginated_result(fetch_page, params, spec.resource_name)
+
+    def _fetch_ranged_slice_with_retry(
+        self,
+        fetch_page: Callable[..., Any],
+        spec: RangedOrbitEndpointSpec,
+        slice_start: datetime,
+        slice_end: datetime,
+    ) -> list[PaginatedFetchResult]:
+        result = self._fetch_ranged_slice(fetch_page, spec, slice_start, slice_end)
+        if not result.incomplete:
+            return [result]
+
+        duration = slice_end - slice_start
+        half_duration = duration / 2
+        if half_duration < _MIN_SLICE_WINDOW:
+            LOGGER.warning(
+                "Orbit %s remained incomplete at minimum slice window from %s to %s.",
+                spec.resource_name,
+                _to_orbit_iso(slice_start),
+                _to_orbit_iso(slice_end),
+            )
+            return [result]
+
+        midpoint = slice_start + half_duration
+        if midpoint <= slice_start or midpoint >= slice_end:
+            LOGGER.warning(
+                "Orbit %s could not be split into smaller slices from %s to %s.",
+                spec.resource_name,
+                _to_orbit_iso(slice_start),
+                _to_orbit_iso(slice_end),
+            )
+            return [result]
+
+        LOGGER.info(
+            "Retrying Orbit %s with smaller slices from %s to %s.",
+            spec.resource_name,
+            _to_orbit_iso(slice_start),
+            _to_orbit_iso(slice_end),
+        )
+        return [
+            *self._fetch_ranged_slice_with_retry(fetch_page, spec, slice_start, midpoint),
+            *self._fetch_ranged_slice_with_retry(fetch_page, spec, midpoint, slice_end),
+        ]
+
+    def _fetch_ranged_resource(
+        self,
+        fetch_page: Callable[..., Any],
+        spec: RangedOrbitEndpointSpec,
+        range_key: str,
+        window_start: datetime,
+        window_end: datetime,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        slice_width = _INITIAL_SLICE_WINDOWS[range_key]
+        results: list[PaginatedFetchResult] = []
+        cursor = window_start
+
+        while cursor < window_end:
+            slice_end = min(cursor + slice_width, window_end)
+            results.extend(self._fetch_ranged_slice_with_retry(fetch_page, spec, cursor, slice_end))
+            cursor = slice_end
+
+        return self._merge_ranged_results(results, spec, warnings)
 
     def fetch_snapshot(self, range_key: str) -> dict[str, Any]:
         client = self._get_client()
         warnings: list[str] = []
         system_time = client.get_system_time().json()
 
-        now_utc_ms = int(system_time["msSinceEpoch"])
-        window_minutes = {"24h": 24 * 60, "7d": 7 * 24 * 60, "30d": 30 * 24 * 60}[range_key]
-        window_start_ms = now_utc_ms - (window_minutes * 60 * 1000)
+        now_utc = datetime.fromtimestamp(int(system_time["msSinceEpoch"]) / 1000, tz=timezone.utc).replace(microsecond=0)
+        window_start = now_utc - _RANGE_WINDOWS[range_key]
 
-        start_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(window_start_ms / 1000))
-        end_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now_utc_ms / 1000))
-        runs = self._fetch_paginated(
-            client.get_runs,
-            {
-                "startTime": start_iso,
-                "endTime": end_iso,
-                "orderBy": "newest",
-            },
-            "runs",
+        runs = self._fetch_ranged_resource(
+            getattr(client, _RANGED_ORBIT_ENDPOINTS["runs"].getter_name),
+            _RANGED_ORBIT_ENDPOINTS["runs"],
+            range_key,
+            window_start,
+            now_utc,
             warnings,
         )
-        run_events = self._fetch_paginated(
-            client.get_run_events,
-            {
-                "startTime": start_iso,
-                "endTime": end_iso,
-                "orderBy": "-created_at",
-            },
-            "run events",
+        run_events = self._fetch_ranged_resource(
+            getattr(client, _RANGED_ORBIT_ENDPOINTS["runEvents"].getter_name),
+            _RANGED_ORBIT_ENDPOINTS["runEvents"],
+            range_key,
+            window_start,
+            now_utc,
             warnings,
         )
-        run_captures = self._fetch_paginated(
-            client.get_run_captures,
-            {
-                "startCreatedAt": start_iso,
-                "endCreatedAt": end_iso,
-                "orderBy": "-created_at",
-            },
-            "run captures",
+        run_captures = self._fetch_ranged_resource(
+            getattr(client, _RANGED_ORBIT_ENDPOINTS["runCaptures"].getter_name),
+            _RANGED_ORBIT_ENDPOINTS["runCaptures"],
+            range_key,
+            window_start,
+            now_utc,
             warnings,
         )
-        anomalies = self._fetch_paginated(
-            client.get_anomalies,
-            {
-                "startTime": start_iso,
-                "endTime": end_iso,
-                "orderBy": "-time",
-            },
-            "anomalies",
+        anomalies = self._fetch_ranged_resource(
+            getattr(client, _RANGED_ORBIT_ENDPOINTS["anomalies"].getter_name),
+            _RANGED_ORBIT_ENDPOINTS["anomalies"],
+            range_key,
+            window_start,
+            now_utc,
             warnings,
         )
         open_anomalies = self._fetch_paginated(

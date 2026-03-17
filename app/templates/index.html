@@ -92,33 +92,33 @@
         <section class="warning-strip is-hidden" id="warning-strip"></section>
 
         <section class="chart-grid">
-          <article class="panel panel--wide">
+          <article class="panel panel--wide panel--timeseries">
             <div class="panel__header">
               <h2>Runs Started Over Time</h2>
               <p id="runs-chart-detail">Runs that began each hour or day in the selected period.</p>
             </div>
-            <canvas aria-label="Runs started over time" id="runs-chart"></canvas>
+            <canvas aria-label="Runs started over time" class="chart-canvas chart-canvas--timeseries" data-height="290" id="runs-chart"></canvas>
           </article>
           <article class="panel">
             <div class="panel__header">
               <h2>Run Status Breakdown</h2>
               <p id="status-chart-detail">Status breakdown for runs that began in the selected period.</p>
             </div>
-            <canvas aria-label="Run status breakdown" id="status-chart"></canvas>
+            <canvas aria-label="Run status breakdown" class="chart-canvas" id="status-chart"></canvas>
           </article>
-          <article class="panel">
+          <article class="panel panel--timeseries">
             <div class="panel__header">
               <h2>Captures Recorded Over Time</h2>
               <p id="captures-chart-detail">Captures recorded each hour or day in the selected period.</p>
             </div>
-            <canvas aria-label="Captures recorded over time" id="captures-chart"></canvas>
+            <canvas aria-label="Captures recorded over time" class="chart-canvas chart-canvas--timeseries" data-height="290" id="captures-chart"></canvas>
           </article>
-          <article class="panel panel--wide">
+          <article class="panel panel--wide panel--timeseries">
             <div class="panel__header">
               <h2>Run Activity Over Time</h2>
               <p id="events-chart-detail">Action-level Orbit activity recorded each hour or day in the selected period.</p>
             </div>
-            <canvas aria-label="Run activity over time" id="events-chart"></canvas>
+            <canvas aria-label="Run activity over time" class="chart-canvas chart-canvas--timeseries" data-height="290" id="events-chart"></canvas>
           </article>
         </section>
 

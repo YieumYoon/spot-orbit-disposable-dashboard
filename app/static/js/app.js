@@ -14,6 +14,27 @@ const chartPalette = {
   status: ["#79d498", "#ff7a59", "#ff9f68", "#f4b942", "#56c7ff", "#c48eff", "#96a6b5"],
 };
 
+const bucketDayFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  timeZone: APP.timezone,
+});
+
+const bucketMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  timeZone: APP.timezone,
+});
+
+const bucketMonthKeyFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "numeric",
+  year: "numeric",
+  timeZone: APP.timezone,
+});
+
+const bucketTooltipFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeZone: APP.timezone,
+});
+
 function formatTimestamp(timestamp) {
   if (!timestamp) {
     return "—";
@@ -76,6 +97,109 @@ function createOrUpdateChart(key, elementId, config) {
   state.charts[key] = new window.Chart(context, config);
 }
 
+function bucketDate(bucket) {
+  if (!bucket?.bucketStart) {
+    return null;
+  }
+
+  const date = new Date(bucket.bucketStart);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function bucketMonthKey(bucket) {
+  const date = bucketDate(bucket);
+  if (!date) {
+    return "";
+  }
+  return bucketMonthKeyFormatter.format(date);
+}
+
+function timeSeriesLabels(buckets, rangeKey) {
+  if (rangeKey !== "30d") {
+    return buckets.map((bucket) => bucket.label);
+  }
+
+  return buckets.map((bucket, index) => {
+    const date = bucketDate(bucket);
+    if (!date) {
+      return bucket.label;
+    }
+
+    const dayLabel = bucketDayFormatter.format(date);
+    const previousBucket = buckets[index - 1];
+    const startsNewMonth = index === 0 || bucketMonthKey(previousBucket) !== bucketMonthKey(bucket);
+    if (startsNewMonth) {
+      return [bucketMonthFormatter.format(date), dayLabel];
+    }
+
+    return ["", dayLabel];
+  });
+}
+
+function timeSeriesTooltipTitle(buckets, dataIndex) {
+  const bucket = buckets[dataIndex];
+  const date = bucketDate(bucket);
+  if (!date) {
+    return bucket?.label || "";
+  }
+  return bucketTooltipFormatter.format(date);
+}
+
+function timeSeriesChartOptions(buckets, rangeKey) {
+  const isThirtyDayRange = rangeKey === "30d";
+
+  return {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: isThirtyDayRange ? {
+        callbacks: {
+          title(items) {
+            const item = items[0];
+            return timeSeriesTooltipTitle(buckets, item?.dataIndex ?? 0);
+          },
+        },
+      } : undefined,
+    },
+    scales: {
+      x: {
+        ticks: {
+          autoSkip: !isThirtyDayRange,
+          maxRotation: 0,
+          minRotation: 0,
+          padding: isThirtyDayRange ? 8 : 0,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0,
+        },
+      },
+    },
+  };
+}
+
+function renderTimeSeriesChart(key, elementId, buckets, color, rangeKey) {
+  createOrUpdateChart(key, elementId, {
+    type: "bar",
+    data: {
+      labels: timeSeriesLabels(buckets, rangeKey),
+      datasets: [{
+        data: buckets.map((bucket) => bucket.count),
+        backgroundColor: color,
+      }],
+    },
+    options: timeSeriesChartOptions(buckets, rangeKey),
+  });
+}
+
 function renderWarnings(warnings) {
   const strip = document.getElementById("warning-strip");
   const combined = mergedWarnings(warnings);
@@ -117,19 +241,13 @@ function renderNarrative(rangeKey) {
   document.getElementById("events-panel-detail").textContent = `Most recent action-level Orbit activity in the ${periodLabel}, including event type and attached captures.`;
 }
 
-function renderCharts(trends) {
+function renderCharts(trends, rangeKey) {
   if (typeof window.Chart !== "function") {
     addClientWarning("Charts are unavailable because the dashboard could not load its local chart library.");
     return;
   }
 
-  createOrUpdateChart("runs", "runs-chart", {
-    type: "bar",
-    data: {
-      labels: trends.runsByBucket.map((item) => item.label),
-      datasets: [{ data: trends.runsByBucket.map((item) => item.count), backgroundColor: chartPalette.runs }],
-    },
-  });
+  renderTimeSeriesChart("runs", "runs-chart", trends.runsByBucket, chartPalette.runs, rangeKey);
 
   const statusMix = trends.missionStatusMix.filter((item) => item.count > 0);
   createOrUpdateChart("status", "status-chart", {
@@ -143,21 +261,8 @@ function renderCharts(trends) {
     },
   });
 
-  createOrUpdateChart("captures", "captures-chart", {
-    type: "bar",
-    data: {
-      labels: trends.capturesByBucket.map((item) => item.label),
-      datasets: [{ data: trends.capturesByBucket.map((item) => item.count), backgroundColor: chartPalette.captures }],
-    },
-  });
-
-  createOrUpdateChart("events", "events-chart", {
-    type: "bar",
-    data: {
-      labels: trends.eventsByBucket.map((item) => item.label),
-      datasets: [{ data: trends.eventsByBucket.map((item) => item.count), backgroundColor: chartPalette.events }],
-    },
-  });
+  renderTimeSeriesChart("captures", "captures-chart", trends.capturesByBucket, chartPalette.captures, rangeKey);
+  renderTimeSeriesChart("events", "events-chart", trends.eventsByBucket, chartPalette.events, rangeKey);
 }
 
 function renderRuns(rows, rangeKey) {
@@ -220,7 +325,7 @@ function renderDashboard(payload) {
   renderNarrative(payload.range);
   renderWarnings(payload.warnings);
   renderSummary(payload.summary);
-  renderCharts(payload.trends);
+  renderCharts(payload.trends, payload.range);
   renderRuns(payload.recentRuns, payload.range);
   renderEvents(payload.recentEvents, payload.range);
   renderAnomalies(payload.anomalies);

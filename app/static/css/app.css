@@ -249,6 +249,10 @@ body::before {
   min-height: 340px;
 }
 
+.panel--timeseries {
+  min-height: 380px;
+}
+
 .panel--full {
   grid-column: 1 / -1;
 }
@@ -267,10 +271,14 @@ body::before {
   text-align: right;
 }
 
-canvas {
+.chart-canvas {
   width: 100%;
   height: 250px;
   display: block;
+}
+
+.chart-canvas--timeseries {
+  height: 290px;
 }
 
 .anomaly-stats {
