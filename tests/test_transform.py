@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import unittest
 from datetime import datetime, timezone
@@ -24,7 +25,7 @@ def _load_snapshot() -> dict:
         "openAnomalies": {
             "resources": [item for item in anomalies["resources"] if item["status"] == "open"]
         },
-        "warnings": ["Fixture mode is enabled."],
+        "warnings": ["Showing sample data. This dashboard is not using live Orbit data."],
     }
 
 
@@ -55,7 +56,72 @@ class TransformTestCase(unittest.TestCase):
         self.assertEqual(result["summary"]["successfulRuns"], 2)
         self.assertEqual(result["summary"]["openAnomalies"], 2)
         self.assertEqual(result["summary"]["robotStatus"]["label"], "Active")
+        self.assertEqual(
+            result["summary"]["robotStatus"]["detail"],
+            "Currently running: Steam Loop Thermal Sweep",
+        )
         self.assertEqual(result["anomalies"]["newInRange"], 3)
+
+    def test_robot_status_recently_active_detail_is_plain_english(self) -> None:
+        snapshot = _load_snapshot()
+        snapshot["runs"]["resources"] = []
+        snapshot["runCaptures"]["resources"] = []
+
+        payload = build_dashboard_payload(snapshot, _config(), "7d")
+        result = payload.to_dict()
+
+        self.assertEqual(result["summary"]["robotStatus"]["label"], "Recently Active")
+        self.assertEqual(
+            result["summary"]["robotStatus"]["detail"],
+            "Orbit recorded activity in the last 24 hours.",
+        )
+
+    def test_robot_status_idle_detail_is_plain_english(self) -> None:
+        snapshot = _load_snapshot()
+        snapshot["runs"]["resources"] = []
+        snapshot["runCaptures"]["resources"] = []
+        stale_event = copy.deepcopy(snapshot["runEvents"]["resources"][-1])
+        stale_event["time"] = "2026-03-01T10:00:00Z"
+        stale_event["createdAt"] = "2026-03-01T10:00:00Z"
+        snapshot["runEvents"]["resources"] = [stale_event]
+
+        payload = build_dashboard_payload(snapshot, _config(), "30d")
+        result = payload.to_dict()
+
+        self.assertEqual(result["summary"]["robotStatus"]["label"], "Idle")
+        self.assertEqual(
+            result["summary"]["robotStatus"]["detail"],
+            "Orbit has older activity on record, but none in the last 24 hours.",
+        )
+
+    def test_robot_status_unknown_detail_when_no_activity_exists(self) -> None:
+        snapshot = _load_snapshot()
+        snapshot["runs"]["resources"] = []
+        snapshot["runEvents"]["resources"] = []
+        snapshot["runCaptures"]["resources"] = []
+
+        payload = build_dashboard_payload(snapshot, _config(), "7d")
+        result = payload.to_dict()
+
+        self.assertEqual(result["summary"]["robotStatus"]["label"], "Unknown")
+        self.assertEqual(
+            result["summary"]["robotStatus"]["detail"],
+            "Orbit has not recorded any runs, run activity, or captures yet.",
+        )
+
+    def test_backend_fallback_copy_is_polished(self) -> None:
+        snapshot = _load_snapshot()
+        snapshot["runs"]["resources"] = [copy.deepcopy(snapshot["runs"]["resources"][0])]
+        snapshot["runs"]["resources"][0]["missionName"] = None
+        snapshot["anomalies"]["resources"] = [copy.deepcopy(snapshot["anomalies"]["resources"][0])]
+        snapshot["anomalies"]["resources"][0]["title"] = None
+        snapshot["anomalies"]["resources"][0]["name"] = None
+
+        payload = build_dashboard_payload(snapshot, _config(), "7d")
+        result = payload.to_dict()
+
+        self.assertEqual(result["recentRuns"][0]["missionName"], "Unnamed mission")
+        self.assertEqual(result["anomalies"]["recent"][0]["title"], "Untitled issue")
 
     def test_build_payload_for_24h_range(self) -> None:
         payload = build_dashboard_payload(_load_snapshot(), _config(), "24h")

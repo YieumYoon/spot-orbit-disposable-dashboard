@@ -42,6 +42,8 @@ STATUS_LABELS = {
 }
 
 ACTIVE_STATUSES = {"RUNNING", "PAUSED"}
+FALLBACK_MISSION_NAME = "Unnamed mission"
+FALLBACK_ISSUE_TITLE = "Untitled issue"
 RANGE_DEFINITIONS = {
     "24h": {"window": timedelta(hours=24), "step": timedelta(hours=1), "label_format": "%-I %p"},
     "7d": {"window": timedelta(days=7), "step": timedelta(days=1), "label_format": "%b %-d"},
@@ -158,18 +160,23 @@ def _derive_robot_status(
     )
 
     if latest_run and (latest_run.get("missionStatus") or "").upper() in ACTIVE_STATUSES:
-        detail = latest_run.get("missionName") or "Mission in progress"
+        mission_name = latest_run.get("missionName") or FALLBACK_MISSION_NAME
+        detail = f"Currently running: {mission_name}"
         return RobotStatus(label="Active", detail=detail, lastActivityAt=_to_iso(latest_activity))
 
     if _recently_active(latest_activity, now_utc):
-        detail = "Activity recorded within the last 24 hours"
+        detail = "Orbit recorded activity in the last 24 hours."
         return RobotStatus(label="Recently Active", detail=detail, lastActivityAt=_to_iso(latest_activity))
 
     if latest_activity is not None:
-        detail = "Historical Orbit activity available"
+        detail = "Orbit has older activity on record, but none in the last 24 hours."
         return RobotStatus(label="Idle", detail=detail, lastActivityAt=_to_iso(latest_activity))
 
-    return RobotStatus(label="Unknown", detail="No Orbit activity available", lastActivityAt=None)
+    return RobotStatus(
+        label="Unknown",
+        detail="Orbit has not recorded any runs, run activity, or captures yet.",
+        lastActivityAt=None,
+    )
 
 
 def _range_window(now_utc: datetime, range_key: str) -> tuple[datetime, datetime]:
@@ -239,7 +246,7 @@ def build_dashboard_payload(
     recent_runs = [
         RecentRun(
             uuid=str(run.get("uuid") or ""),
-            missionName=run.get("missionName") or "Unknown mission",
+            missionName=run.get("missionName") or FALLBACK_MISSION_NAME,
             startTime=_to_iso(_parse_timestamp(run.get("startTime"))),
             endTime=_to_iso(_parse_timestamp(run.get("endTime"))),
             status=_normalize_status(run.get("missionStatus")),
@@ -266,7 +273,7 @@ def build_dashboard_payload(
     recent_anomalies = [
         RecentAnomaly(
             uuid=str(anomaly.get("uuid") or ""),
-            title=anomaly.get("title") or anomaly.get("name") or "Untitled anomaly",
+            title=anomaly.get("title") or anomaly.get("name") or FALLBACK_ISSUE_TITLE,
             status=(anomaly.get("status") or "unknown").lower(),
             severity=anomaly.get("severity"),
             createdAt=_to_iso(_parse_timestamp(anomaly.get("createdAt"))),

@@ -24,7 +24,18 @@ class RoutesTestCase(unittest.TestCase):
     def test_index_renders(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Spot Orbit Activity Dashboard", response.data)
+        self.assertIn(b"Spot Activity Dashboard", response.data)
+        self.assertIn(b"Dashboard link", response.data)
+        self.assertIn(b"Last 7 days", response.data)
+        self.assertIn(b"Runs Started", response.data)
+        self.assertIn(b"Successful Runs", response.data)
+        self.assertIn(b"Captures Recorded Over Time", response.data)
+        self.assertIn(b"Recent Run Activity", response.data)
+        self.assertIn(
+            b"Current open issue count in Orbit. Some issues may have been reported before the selected period.",
+            response.data,
+        )
+        self.assertNotIn(b"Spot Orbit Summary", response.data)
 
     def test_dashboard_payload_uses_requested_range(self) -> None:
         response = self.client.get("/api/dashboard?range=7d")

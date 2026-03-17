@@ -34,6 +34,16 @@ def _import_bosdyn_client():
         return Client
 
 
+def _warning_label(resource_name: str) -> str:
+    return {
+        "runs": "Runs",
+        "run events": "Run activity",
+        "run captures": "Captures",
+        "anomalies": "Issues",
+        "open anomalies": "Open issues",
+    }.get(resource_name, resource_name.capitalize())
+
+
 class FixtureOrbitSource:
     def __init__(self, config: DashboardConfig) -> None:
         self._config = config
@@ -44,7 +54,7 @@ class FixtureOrbitSource:
             return json.load(handle)
 
     def fetch_snapshot(self, range_key: str) -> dict[str, Any]:
-        warnings = ["Fixture mode is enabled. Live Orbit data is not being used."]
+        warnings = ["Showing sample data. This dashboard is not using live Orbit data."]
         return {
             "systemTime": self._load_json("system_time.json"),
             "runs": self._load_json("runs.json"),
@@ -90,7 +100,9 @@ class LiveOrbitSource:
         total = payload.get("total")
         loaded = len(payload.get("resources", []))
         if isinstance(total, int) and total > loaded:
-            warnings.append(f"{resource_name} results incomplete: loaded {loaded} of {total}.")
+            warnings.append(
+                f"{_warning_label(resource_name)} may be incomplete: showing {loaded} of {total} records from Orbit."
+            )
 
     def _fetch_paginated(
         self,
@@ -110,7 +122,9 @@ class LiveOrbitSource:
 
             current_offset = page_payload.get("offset", offset)
             if isinstance(current_offset, int) and current_offset != offset:
-                warnings.append(f"{resource_name} pagination desynced at offset {offset}.")
+                warnings.append(
+                    f"{_warning_label(resource_name)} may be incomplete because Orbit returned an unexpected page at record {offset}."
+                )
                 break
 
             page_resources_raw = page_payload.get("resources", [])
@@ -123,14 +137,17 @@ class LiveOrbitSource:
 
             if not page_resources:
                 break
-            if isinstance(total, int) and len(combined_resources) >= total:
-                break
-            if len(page_resources) < effective_limit:
+            if isinstance(total, int):
+                if len(combined_resources) >= total:
+                    break
+            elif len(page_resources) < effective_limit:
                 break
 
             next_offset = offset + len(page_resources)
             if next_offset <= offset:
-                warnings.append(f"{resource_name} pagination stopped early at offset {offset}.")
+                warnings.append(
+                    f"{_warning_label(resource_name)} may be incomplete because Orbit pagination stopped early at record {offset}."
+                )
                 break
             offset = next_offset
 

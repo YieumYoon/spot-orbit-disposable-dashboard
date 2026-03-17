@@ -37,6 +37,17 @@ function addClientWarning(message) {
   }
 }
 
+function rangePeriodLabel(rangeKey) {
+  if (rangeKey === "24h") return "last 24 hours";
+  if (rangeKey === "7d") return "last 7 days";
+  if (rangeKey === "30d") return "last 30 days";
+  return "selected period";
+}
+
+function rangeBucketLabel(rangeKey) {
+  return rangeKey === "24h" ? "hour" : "day";
+}
+
 function mergedWarnings(warnings) {
   return [...new Set([...(warnings || []), ...state.clientWarnings])];
 }
@@ -48,6 +59,13 @@ function statusChipClass(status) {
   if (normalized === "paused" || normalized === "stopped") return "status-chip status-chip--warning";
   if (normalized === "failure" || normalized === "error") return "status-chip status-chip--error";
   return "status-chip status-chip--unknown";
+}
+
+function titleCaseLabel(value) {
+  if (!value) {
+    return "Unknown";
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function createOrUpdateChart(key, elementId, config) {
@@ -80,9 +98,28 @@ function renderSummary(summary) {
   document.getElementById("card-open-anomalies").textContent = summary.openAnomalies;
 }
 
+function renderNarrative(rangeKey) {
+  const periodLabel = rangePeriodLabel(rangeKey);
+  const bucketLabel = rangeBucketLabel(rangeKey);
+
+  document.getElementById("card-last-activity-detail").textContent = `Most recent run, activity update, or capture recorded in the ${periodLabel}.`;
+  document.getElementById("card-runs-detail").textContent = `Runs that began in the ${periodLabel}.`;
+  document.getElementById("card-successful-runs-detail").textContent = `Runs in the ${periodLabel} that finished with a final status of Success.`;
+  document.getElementById("card-captures-detail").textContent = `Captures recorded in the ${periodLabel}.`;
+  document.getElementById("card-open-anomalies-detail").textContent = `Current open issue count in Orbit. Some issues may have been reported before the ${periodLabel}.`;
+
+  document.getElementById("runs-chart-detail").textContent = `Runs that began each ${bucketLabel} in the ${periodLabel}.`;
+  document.getElementById("status-chart-detail").textContent = `Status breakdown for runs that began in the ${periodLabel}.`;
+  document.getElementById("captures-chart-detail").textContent = `Captures recorded each ${bucketLabel} in the ${periodLabel}.`;
+  document.getElementById("events-chart-detail").textContent = `Action-level Orbit activity recorded each ${bucketLabel} in the ${periodLabel}.`;
+  document.getElementById("anomaly-panel-detail").textContent = `Open shows the current issue backlog. New and closed show issue activity in the ${periodLabel}.`;
+  document.getElementById("runs-panel-detail").textContent = `Most recent runs that began in the ${periodLabel}. Actions shows Orbit's recorded action count for each run.`;
+  document.getElementById("events-panel-detail").textContent = `Most recent action-level Orbit activity in the ${periodLabel}, including event type and attached captures.`;
+}
+
 function renderCharts(trends) {
   if (typeof window.Chart !== "function") {
-    addClientWarning("Charts are unavailable because the local chart script could not be loaded from /static/vendor/chart.umd.min.js.");
+    addClientWarning("Charts are unavailable because the dashboard could not load its local chart library.");
     return;
   }
 
@@ -123,10 +160,10 @@ function renderCharts(trends) {
   });
 }
 
-function renderRuns(rows) {
+function renderRuns(rows, rangeKey) {
   const body = document.getElementById("runs-table-body");
   if (!rows.length) {
-    body.innerHTML = `<tr><td class="empty-state" colspan="5">No runs in the selected window.</td></tr>`;
+    body.innerHTML = `<tr><td class="empty-state" colspan="5">No runs started in the ${rangePeriodLabel(rangeKey)}.</td></tr>`;
     return;
   }
   body.innerHTML = rows.map((row) => `
@@ -140,10 +177,10 @@ function renderRuns(rows) {
   `).join("");
 }
 
-function renderEvents(events) {
+function renderEvents(events, rangeKey) {
   const shell = document.getElementById("events-feed");
   if (!events.length) {
-    shell.innerHTML = `<div class="empty-state">No recent events for this range.</div>`;
+    shell.innerHTML = `<div class="empty-state">No run activity was recorded in the ${rangePeriodLabel(rangeKey)}.</div>`;
     return;
   }
   shell.innerHTML = events.map((event) => `
@@ -151,8 +188,8 @@ function renderEvents(events) {
       <div class="feed-card__time">${formatTimestamp(event.time)}</div>
       <h3 class="feed-card__title">${event.actionName || "Unnamed action"}</h3>
       <div class="feed-card__meta">
-        <div>${event.missionName || "Unknown mission"}</div>
-        <div>Type: ${event.eventType || "n/a"}</div>
+        <div>${event.missionName || "Unnamed mission"}</div>
+        <div>Type: ${event.eventType || "Not provided"}</div>
         <div>Captures: ${event.captureCount}</div>
       </div>
     </article>
@@ -166,13 +203,13 @@ function renderAnomalies(snapshot) {
 
   const body = document.getElementById("anomaly-table-body");
   if (!snapshot.recent.length) {
-    body.innerHTML = `<tr><td class="empty-state" colspan="4">No anomalies available.</td></tr>`;
+    body.innerHTML = `<tr><td class="empty-state" colspan="4">No issues are available in the current Orbit snapshot.</td></tr>`;
     return;
   }
   body.innerHTML = snapshot.recent.map((item) => `
     <tr>
       <td>${item.title}</td>
-      <td><span class="${statusChipClass(item.status === "open" ? "warning" : "success")}">${item.status}</span></td>
+      <td><span class="${statusChipClass(item.status === "open" ? "warning" : "success")}">${titleCaseLabel(item.status)}</span></td>
       <td>${item.severity ?? "—"}</td>
       <td>${formatTimestamp(item.createdAt || item.time)}</td>
     </tr>
@@ -180,17 +217,18 @@ function renderAnomalies(snapshot) {
 }
 
 function renderDashboard(payload) {
+  renderNarrative(payload.range);
   renderWarnings(payload.warnings);
   renderSummary(payload.summary);
   renderCharts(payload.trends);
-  renderRuns(payload.recentRuns);
-  renderEvents(payload.recentEvents);
+  renderRuns(payload.recentRuns, payload.range);
+  renderEvents(payload.recentEvents, payload.range);
   renderAnomalies(payload.anomalies);
   document.getElementById("last-refresh").textContent = formatTimestamp(payload.generatedAt);
 }
 
 async function loadDashboard() {
-  setStateMessage("Refreshing live Orbit summary…");
+  setStateMessage("Refreshing dashboard…");
   try {
     const response = await fetch(`${APP.apiUrl}?range=${encodeURIComponent(state.range)}`);
     if (!response.ok) {
@@ -198,7 +236,7 @@ async function loadDashboard() {
     }
     const payload = await response.json();
     renderDashboard(payload);
-    setStateMessage(`Range ${state.range} loaded.`);
+    setStateMessage(`Showing activity from the ${rangePeriodLabel(state.range)}.`);
   } catch (error) {
     console.error(error);
     setStateMessage("Unable to load dashboard data.", true);

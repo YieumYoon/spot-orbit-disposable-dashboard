@@ -195,7 +195,45 @@ class OrbitClientTestCase(unittest.TestCase):
         payload = source._fetch_paginated(fetch_page, {}, "run events", warnings)
 
         self.assertEqual(len(payload["resources"]), 2)
-        self.assertEqual(warnings, ["run events results incomplete: loaded 2 of 5."])
+        self.assertEqual(
+            warnings,
+            ["Run activity may be incomplete: showing 2 of 5 records from Orbit."],
+        )
+
+    def test_fetch_paginated_continues_when_total_indicates_more_results(self) -> None:
+        source = LiveOrbitSource(_config())
+        warnings: list[str] = []
+        pages = {
+            0: {
+                "resources": [{"uuid": "run-1"}, {"uuid": "run-2"}],
+                "limit": 5,
+                "offset": 0,
+                "total": 5,
+            },
+            2: {
+                "resources": [{"uuid": "run-3"}, {"uuid": "run-4"}],
+                "limit": 5,
+                "offset": 2,
+                "total": 5,
+            },
+            4: {
+                "resources": [{"uuid": "run-5"}],
+                "limit": 5,
+                "offset": 4,
+                "total": 5,
+            },
+        }
+
+        def fetch_page(*, params: dict) -> _FakeResponse:
+            return _FakeResponse(pages[params["offset"]])
+
+        payload = source._fetch_paginated(fetch_page, {}, "runs", warnings)
+
+        self.assertEqual(
+            [resource["uuid"] for resource in payload["resources"]],
+            ["run-1", "run-2", "run-3", "run-4", "run-5"],
+        )
+        self.assertFalse(warnings)
 
 
 if __name__ == "__main__":
